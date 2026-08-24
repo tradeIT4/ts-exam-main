@@ -1,0 +1,125 @@
+openapi: 3.1.0
+info:
+  title: Online Exam Reporting API
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    CourseInput:
+      type: object
+      required: [name, type, code]
+      properties:
+        name: { type: string }
+        type: { type: string }
+        code: { type: string }
+    RegistrationInput:
+      type: object
+      required: [studentId, studentName, email, courseId]
+      properties:
+        studentId: { type: string }
+        studentName: { type: string }
+        email: { type: string, format: email }
+        phone: { type: [string, "null"] }
+        courseId: { type: string, format: uuid }
+        registeredAt: { type: string, format: date-time }
+    ExamResultInput:
+      type: object
+      required: [studentId, courseId, score]
+      properties:
+        studentId: { type: string }
+        courseId: { type: string, format: uuid }
+        score: { type: number, minimum: 0, maximum: 100 }
+        passMark: { type: number, minimum: 0, maximum: 100, default: 50 }
+        takenAt: { type: string, format: date-time }
+parameters:
+  courseId: { name: courseId, in: query, schema: { type: string } }
+  courseType: { name: courseType, in: query, schema: { type: string } }
+  status: { name: status, in: query, schema: { type: string, enum: [passed, failed] } }
+  period: { name: period, in: query, schema: { type: string, enum: [daily, weekly, monthly, yearly] } }
+  from: { name: from, in: query, schema: { type: string, format: date-time } }
+  to: { name: to, in: query, schema: { type: string, format: date-time } }
+paths:
+  /health:
+    get:
+      summary: Check service health
+      responses: { "200": { description: Healthy } }
+  /api/v1/courses:
+    get:
+      summary: List courses
+      parameters: [{ name: type, in: query, schema: { type: string } }]
+      responses: { "200": { description: Course list } }
+    post:
+      summary: Create a course
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CourseInput" } } }
+      responses: { "201": { description: Course created }, "409": { description: Duplicate code } }
+  /api/v1/registrations:
+    get:
+      summary: List and filter complete student registrations
+      parameters:
+        - { $ref: "#/parameters/courseId" }
+        - { $ref: "#/parameters/courseType" }
+        - { $ref: "#/parameters/from" }
+        - { $ref: "#/parameters/to" }
+      responses: { "200": { description: Paginated registrations } }
+    post:
+      summary: Register a student for a course
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RegistrationInput" } } }
+      responses: { "201": { description: Registration created } }
+  /api/v1/exam-results:
+    get:
+      summary: List and filter exam results
+      parameters:
+        - { $ref: "#/parameters/courseId" }
+        - { $ref: "#/parameters/courseType" }
+        - { $ref: "#/parameters/status" }
+        - { $ref: "#/parameters/from" }
+        - { $ref: "#/parameters/to" }
+      responses: { "200": { description: Paginated exam results } }
+    post:
+      summary: Record an exam attempt
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ExamResultInput" } } }
+      responses: { "201": { description: Exam result created } }
+  /api/v1/reports/exams:
+    get:
+      summary: Get pass/fail exam statistics
+      parameters:
+        - { $ref: "#/parameters/courseId" }
+        - { $ref: "#/parameters/courseType" }
+        - { $ref: "#/parameters/status" }
+        - { $ref: "#/parameters/period" }
+        - { $ref: "#/parameters/from" }
+        - { $ref: "#/parameters/to" }
+      responses: { "200": { description: Exam totals, course breakdown, and optional timeline } }
+  /api/v1/reports/registrations:
+    get:
+      summary: Get student registration statistics
+      parameters:
+        - { $ref: "#/parameters/courseId" }
+        - { $ref: "#/parameters/courseType" }
+        - { $ref: "#/parameters/period" }
+        - { $ref: "#/parameters/from" }
+        - { $ref: "#/parameters/to" }
+      responses: { "200": { description: Registration totals, course breakdown, and optional timeline } }
+  /api/v1/dashboard:
+    get:
+      summary: Get combined exam and registration reports
+      parameters:
+        - { $ref: "#/parameters/courseId" }
+        - { $ref: "#/parameters/courseType" }
+        - { $ref: "#/parameters/status" }
+        - { $ref: "#/parameters/period" }
+        - { $ref: "#/parameters/from" }
+        - { $ref: "#/parameters/to" }
+      responses: { "200": { description: Dashboard data } }

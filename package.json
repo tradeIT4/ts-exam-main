@@ -1,0 +1,20 @@
+{
+  "name": "online-exam-reporting-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "REST API for sharing online exam and registration statistics",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --experimental-strip-types src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server.js",
+    "test": "npm run build && node --test --test-isolation=none dist/tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
