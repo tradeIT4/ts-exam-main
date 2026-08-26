@@ -32,12 +32,21 @@ npm start
 | `GET` | `/api/v1/reports/registrations` | Registration totals, course breakdown, timeline |
 | `GET` | `/api/v1/dashboard` | Both reports in one response |
 
-List and report endpoints accept `courseId`, `courseType`, `from`, and `to`. Exam endpoints also accept `status=passed|failed`. Report endpoints accept `period=daily|weekly|monthly|yearly`. List endpoints support `page` and `limit` (maximum 100).
+List and report endpoints accept `courseId`, `courseType`, `from`, and `to`. Exam endpoints also accept `status=passed|failed`. Report endpoints accept `period=daily|weekly|monthly|quarterly|yearly`. List endpoints support `page` and `limit` (maximum 100).
+
+Registrations represent student applications/enrolments for a course. Registration reports return both `totalRegistrations` and `uniqueStudents`; exam reports return the number of attempts as `total` and the distinct learner count as `uniqueStudents`. Every breakdown includes course ID, code, name, and type so another system can display or process the results.
 
 Example report:
 
 ```text
 GET /api/v1/reports/exams?courseType=programming&status=passed&period=monthly&from=2026-01-01&to=2026-12-31
+```
+
+Quarterly combined dashboard example:
+
+```text
+GET /api/v1/dashboard?period=quarterly&from=2026-01-01T00:00:00Z&to=2026-12-31T23:59:59Z
+X-API-Key: your-shared-secret
 ```
 
 Example registration:

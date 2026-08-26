@@ -44,8 +44,8 @@ test("creates a course, registrations, and calculated exam results", async () =>
 
 test("returns filtered monthly exam and registration reports", async () => {
   const examsResponse = await fetch(`${baseUrl}/api/v1/reports/exams?courseType=programming&period=monthly`);
-  const exams = await examsResponse.json() as { totals: { total: number; passed: number; failed: number }; timeline: unknown[] };
-  assert.deepEqual(exams.totals, { total: 2, passed: 1, failed: 1, averageScore: 62, passRate: 50 });
+  const exams = await examsResponse.json() as { totals: { total: number; uniqueStudents: number; passed: number; failed: number }; timeline: unknown[] };
+  assert.deepEqual(exams.totals, { total: 2, uniqueStudents: 2, passed: 1, failed: 1, averageScore: 62, passRate: 50 });
   assert.equal(exams.timeline.length, 1);
 
   const registrationsResponse = await fetch(`${baseUrl}/api/v1/reports/registrations?courseId=${courseId}&period=yearly`);
@@ -54,8 +54,32 @@ test("returns filtered monthly exam and registration reports", async () => {
   assert.equal(registrations.timeline.length, 1);
 });
 
+test("returns quarterly timelines and unique student counts", async () => {
+  const examsResponse = await fetch(`${baseUrl}/api/v1/reports/exams?period=quarterly`);
+  const exams = await examsResponse.json() as {
+    totals: { total: number; uniqueStudents: number };
+    byCourse: Array<{ uniqueStudents: number }>;
+    timeline: Array<{ period: string; total: number; uniqueStudents: number; passed: number; failed: number }>;
+  };
+  assert.equal(exams.totals.total, 2);
+  assert.equal(exams.totals.uniqueStudents, 2);
+  assert.equal(exams.byCourse[0]?.uniqueStudents, 2);
+  assert.deepEqual(exams.timeline, [{ period: "2026-Q3", total: 2, uniqueStudents: 2, passed: 1, failed: 1 }]);
+
+  const registrationsResponse = await fetch(`${baseUrl}/api/v1/reports/registrations?period=quarterly`);
+  const registrations = await registrationsResponse.json() as {
+    totalRegistrations: number;
+    uniqueStudents: number;
+    timeline: Array<{ period: string; registrations: number; uniqueStudents: number }>;
+  };
+  assert.equal(registrations.totalRegistrations, 1);
+  assert.equal(registrations.uniqueStudents, 1);
+  assert.deepEqual(registrations.timeline, [{ period: "2026-Q3", registrations: 1, uniqueStudents: 1 }]);
+});
+
 test("validates filters and supports a combined dashboard", async () => {
   assert.equal((await fetch(`${baseUrl}/api/v1/reports/exams?status=unknown`)).status, 400);
+  assert.equal((await fetch(`${baseUrl}/api/v1/reports/exams?from=2026-12-31&to=2026-01-01`)).status, 400);
   const dashboard = await fetch(`${baseUrl}/api/v1/dashboard?period=daily&status=passed`);
   const body = await dashboard.json() as { exams: { totals: { total: number } }; registrations: { total: number } };
   assert.equal(body.exams.totals.total, 1);

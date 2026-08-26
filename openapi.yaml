@@ -41,7 +41,7 @@ parameters:
   courseId: { name: courseId, in: query, schema: { type: string } }
   courseType: { name: courseType, in: query, schema: { type: string } }
   status: { name: status, in: query, schema: { type: string, enum: [passed, failed] } }
-  period: { name: period, in: query, schema: { type: string, enum: [daily, weekly, monthly, yearly] } }
+  period: { name: period, in: query, schema: { type: string, enum: [daily, weekly, monthly, quarterly, yearly] } }
   from: { name: from, in: query, schema: { type: string, format: date-time } }
   to: { name: to, in: query, schema: { type: string, format: date-time } }
 paths:

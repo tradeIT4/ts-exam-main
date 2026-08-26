@@ -1,4 +1,4 @@
-export type Period = "daily" | "weekly" | "monthly" | "yearly";
+export type Period = "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
 export type ResultStatus = "passed" | "failed";
 
 export interface Filters {

@@ -57,8 +57,8 @@ export function isoDate(value: unknown, field: string, fallback = new Date().toI
 export function parseFilters(url: URL): Filters {
   const period = url.searchParams.get("period") ?? undefined;
   const status = url.searchParams.get("status") ?? undefined;
-  if (period && !["daily", "weekly", "monthly", "yearly"].includes(period)) {
-    throw httpError(400, "period must be daily, weekly, monthly, or yearly");
+  if (period && !["daily", "weekly", "monthly", "quarterly", "yearly"].includes(period)) {
+    throw httpError(400, "period must be daily, weekly, monthly, quarterly, or yearly");
   }
   if (status && !["passed", "failed"].includes(status)) {
     throw httpError(400, "status must be passed or failed");
@@ -67,6 +67,9 @@ export function parseFilters(url: URL): Filters {
   const to = url.searchParams.get("to") ?? undefined;
   if (from && Number.isNaN(Date.parse(from))) throw httpError(400, "from must be a valid date");
   if (to && Number.isNaN(Date.parse(to))) throw httpError(400, "to must be a valid date");
+  if (from && to && Date.parse(from) > Date.parse(to)) {
+    throw httpError(400, "from must be earlier than or equal to to");
+  }
   return {
     ...(url.searchParams.get("courseId") ? { courseId: url.searchParams.get("courseId")! } : {}),
     ...(url.searchParams.get("courseType") ? { courseType: url.searchParams.get("courseType")! } : {}),
