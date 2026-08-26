@@ -85,3 +85,18 @@ test("validates filters and supports a combined dashboard", async () => {
   assert.equal(body.exams.totals.total, 1);
   assert.equal(body.registrations.total, 1);
 });
+
+test("serves the admin data analytics page and its assets", async () => {
+  const page = await fetch(`${baseUrl}/admin/data-analytics`);
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get("content-type") ?? "", /text\/html/);
+  assert.match(await page.text(), /Data Analytics/);
+
+  const stylesheet = await fetch(`${baseUrl}/admin/data-analytics.css`);
+  assert.equal(stylesheet.status, 200);
+  assert.match(stylesheet.headers.get("content-type") ?? "", /text\/css/);
+
+  const script = await fetch(`${baseUrl}/admin/data-analytics.js`);
+  assert.equal(script.status, 200);
+  assert.match(script.headers.get("content-type") ?? "", /javascript/);
+});

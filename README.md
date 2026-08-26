@@ -39,6 +39,8 @@ npm run build
 npm start
 ```
 
+The admin analytics dashboard is available at `http://localhost:3000/admin/data-analytics`. It includes course-level exam pass/fail charts and tables, plus student registration charts and tables with optional date filtering.
+
 ---
 
 ## API Client Management (CLI)

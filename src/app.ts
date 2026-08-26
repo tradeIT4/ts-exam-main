@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { resolve } from "node:path";
 import { createDatabase, type ExamDatabase } from "./database.js";
 import { examReport, paginatedRows, registrationReport } from "./reports.js";
 import { httpError, isoDate, numberInRange, optionalString, parseFilters, readJson, requiredString } from "./validation.js";
@@ -20,6 +22,26 @@ import { sendError } from "./serializers/response.js";
 function send(response: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", ...headers });
   response.end(JSON.stringify(body));
+}
+
+const adminAssets = new Map<string, { file: string; contentType: string }>([
+  ["/admin", { file: "data-analytics.html", contentType: "text/html; charset=utf-8" }],
+  ["/admin/data-analytics", { file: "data-analytics.html", contentType: "text/html; charset=utf-8" }],
+  ["/admin/data-analytics.css", { file: "data-analytics.css", contentType: "text/css; charset=utf-8" }],
+  ["/admin/data-analytics.js", { file: "data-analytics.js", contentType: "text/javascript; charset=utf-8" }],
+]);
+
+function sendAdminAsset(response: ServerResponse, pathname: string): boolean {
+  const asset = adminAssets.get(pathname);
+  if (!asset) return false;
+
+  const contents = readFileSync(resolve(process.cwd(), "public", "admin", asset.file));
+  response.writeHead(200, {
+    "content-type": asset.contentType,
+    "cache-control": asset.file.endsWith(".html") ? "no-cache" : "public, max-age=3600",
+  });
+  response.end(contents);
+  return true;
 }
 
 function paging(url: URL) {
@@ -70,6 +92,10 @@ export function createApp(db: ExamDatabase = createDatabase()) {
 
       if (method === "GET" && (pathname === "/health" || pathname === "")) {
         send(response, 200, { status: "ok", timestamp: new Date().toISOString() });
+        return;
+      }
+
+      if (method === "GET" && sendAdminAsset(response, pathname)) {
         return;
       }
 
