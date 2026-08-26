@@ -1,16 +1,182 @@
 openapi: 3.1.0
 info:
-  title: Online Exam Reporting API
+  title: Online Exam & Registration Reporting REST API
+  description: >
+    A secure, read-only, high-performance REST API allowing third-party systems to query
+    aggregated online exam results, registration statistics, period trends, and course summaries
+    without direct database access or exposure of sensitive student PII.
   version: 1.0.0
 servers:
+  - url: https://tsexam-ashen.vercel.app
+    description: Production server (Vercel)
   - url: http://localhost:3000
+    description: Local development server
+
 components:
   securitySchemes:
-    ApiKey:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+      description: Third-party API token passed via Authorization header (`Authorization: Bearer <API_TOKEN>`)
+    ApiKeyAuth:
       type: apiKey
       in: header
       name: X-API-Key
+      description: API Key passed via X-API-Key header
+
   schemas:
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    ErrorResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Invalid date range"
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            from_date:
+              - "from_date must be before to_date"
+
+    PaginationMeta:
+      type: object
+      required: [page, per_page, total, total_pages, has_next, has_prev]
+      properties:
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 50
+        total:
+          type: integer
+          example: 42
+        total_pages:
+          type: integer
+          example: 1
+        has_next:
+          type: boolean
+          example: false
+        has_prev:
+          type: boolean
+          example: false
+
+    ExamSummaryData:
+      type: object
+      required: [total_exams, students_taken, passed, failed, pass_rate, fail_rate]
+      properties:
+        total_exams:
+          type: integer
+          description: Total number of distinct exams/courses evaluated
+          example: 42
+        students_taken:
+          type: integer
+          description: Total number of student exam attempts
+          example: 1450
+        passed:
+          type: integer
+          description: Total number of passed attempts
+          example: 1180
+        failed:
+          type: integer
+          description: Total number of failed attempts
+          example: 270
+        pass_rate:
+          type: number
+          format: float
+          description: Percentage of exam attempts passed (0.00 - 100.00)
+          example: 81.38
+        fail_rate:
+          type: number
+          format: float
+          description: Percentage of exam attempts failed (0.00 - 100.00)
+          example: 18.62
+        average_score:
+          type: number
+          format: float
+          nullable: true
+          example: 74.5
+
+    CourseExamSummaryItem:
+      type: object
+      required: [course_id, course_name, students_taken, passed, failed, pass_rate]
+      properties:
+        course_id:
+          type: string
+          format: uuid
+          example: "e6f43e5e-8559-4d6f-876a-3532454a8b79"
+        course_name:
+          type: string
+          example: "Mathematics"
+        course_code:
+          type: string
+          example: "MATH101"
+        exam_date:
+          type: string
+          format: date
+          example: "2026-08-24"
+        students_taken:
+          type: integer
+          example: 120
+        passed:
+          type: integer
+          example: 100
+        failed:
+          type: integer
+          example: 20
+        pass_rate:
+          type: number
+          format: float
+          example: 83.33
+        fail_rate:
+          type: number
+          format: float
+          example: 16.67
+
+    PeriodRegistrationStat:
+      type: object
+      required: [current, previous, change_percentage]
+      properties:
+        current:
+          type: integer
+          description: Registrations in the current window
+          example: 185
+        previous:
+          type: integer
+          description: Registrations in the preceding comparison window
+          example: 160
+        change_percentage:
+          type: number
+          format: float
+          description: Percentage growth (+) or contraction (-) vs preceding window
+          example: 15.63
+
+    RegistrationsSummaryData:
+      type: object
+      required: [weekly, monthly, yearly]
+      properties:
+        weekly:
+          $ref: "#/components/schemas/PeriodRegistrationStat"
+        monthly:
+          $ref: "#/components/schemas/PeriodRegistrationStat"
+        yearly:
+          $ref: "#/components/schemas/PeriodRegistrationStat"
+
     CourseInput:
       type: object
       required: [name, type, code]
@@ -18,6 +184,7 @@ components:
         name: { type: string }
         type: { type: string }
         code: { type: string }
+
     RegistrationInput:
       type: object
       required: [studentId, studentName, email, courseId]
@@ -28,6 +195,7 @@ components:
         phone: { type: [string, "null"] }
         courseId: { type: string, format: uuid }
         registeredAt: { type: string, format: date-time }
+
     ExamResultInput:
       type: object
       required: [studentId, courseId, score]
@@ -37,89 +205,264 @@ components:
         score: { type: number, minimum: 0, maximum: 100 }
         passMark: { type: number, minimum: 0, maximum: 100, default: 50 }
         takenAt: { type: string, format: date-time }
+
 parameters:
-  courseId: { name: courseId, in: query, schema: { type: string } }
-  courseType: { name: courseType, in: query, schema: { type: string } }
-  status: { name: status, in: query, schema: { type: string, enum: [passed, failed] } }
-  period: { name: period, in: query, schema: { type: string, enum: [daily, weekly, monthly, quarterly, yearly] } }
-  from: { name: from, in: query, schema: { type: string, format: date-time } }
-  to: { name: to, in: query, schema: { type: string, format: date-time } }
+  PeriodParam:
+    name: period
+    in: query
+    description: Predefined time aggregation window
+    schema:
+      type: string
+      enum: [today, weekly, monthly, yearly, daily, quarterly]
+    example: monthly
+
+  FromDateParam:
+    name: from_date
+    in: query
+    description: Start date filter (inclusive) in YYYY-MM-DD or ISO 8601 format
+    schema:
+      type: string
+    example: "2026-08-01"
+
+  ToDateParam:
+    name: to_date
+    in: query
+    description: End date filter (inclusive) in YYYY-MM-DD or ISO 8601 format
+    schema:
+      type: string
+    example: "2026-08-31"
+
+  CourseIdParam:
+    name: course_id
+    in: query
+    description: Filter summary by specific Course ID
+    schema:
+      type: string
+    example: "10"
+
+  PageParam:
+    name: page
+    in: query
+    description: Page number for paginated endpoints (default 1)
+    schema:
+      type: integer
+      minimum: 1
+      default: 1
+
+  PerPageParam:
+    name: per_page
+    in: query
+    description: Items per page (default 50, max 100)
+    schema:
+      type: integer
+      minimum: 1
+      maximum: 100
+      default: 50
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
 paths:
   /health:
     get:
-      summary: Check service health
-      responses: { "200": { description: Healthy } }
+      summary: Service health check
+      security: []
+      responses:
+        "200":
+          description: API is operational
+          content:
+            application/json:
+              example:
+                status: "ok"
+                timestamp: "2026-08-26T11:40:00.000Z"
+
+  /api/v1/exams/summary:
+    get:
+      summary: Get aggregated online exam statistics
+      description: >
+        Returns aggregate exam metrics including total exams, student attempts taken, passed count,
+        failed count, pass percentage, and fail percentage. Supports date range, period, and course filters.
+      parameters:
+        - $ref: "#/parameters/PeriodParam"
+        - $ref: "#/parameters/FromDateParam"
+        - $ref: "#/parameters/ToDateParam"
+        - $ref: "#/parameters/CourseIdParam"
+      responses:
+        "200":
+          description: Aggregated exam summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, example: true }
+                  period: { type: string, example: "monthly" }
+                  from_date: { type: string, example: "2026-08-01" }
+                  to_date: { type: string, example: "2026-08-31" }
+                  data:
+                    $ref: "#/components/schemas/ExamSummaryData"
+        "400":
+          description: Bad Request (Invalid parameters or dates)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Unauthorized (Missing or invalid API token)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Forbidden (Insufficient permissions or IP not allowed)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "429":
+          description: Too Many Requests (Rate limit exceeded)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/v1/exams/by-course:
+    get:
+      summary: Get exam performance grouped by course
+      description: >
+        Returns a paginated list of courses with student exam counts, pass/fail totals, and pass percentages.
+      parameters:
+        - $ref: "#/parameters/PeriodParam"
+        - $ref: "#/parameters/FromDateParam"
+        - $ref: "#/parameters/ToDateParam"
+        - $ref: "#/parameters/CourseIdParam"
+        - $ref: "#/parameters/PageParam"
+        - $ref: "#/parameters/PerPageParam"
+      responses:
+        "200":
+          description: Course-level exam summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CourseExamSummaryItem"
+                  pagination:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/v1/registrations/summary:
+    get:
+      summary: Get student registration trends and growth rates
+      description: >
+        Returns weekly, monthly, and yearly current vs. previous registration totals along with calculated percentage changes.
+      parameters:
+        - $ref: "#/parameters/CourseIdParam"
+      responses:
+        "200":
+          description: Registration trends summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    $ref: "#/components/schemas/RegistrationsSummaryData"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/v1/dashboard/summary:
+    get:
+      summary: Get high-level executive dashboard summary
+      description: >
+        Returns combined metrics including overall exam summary, registration trends, and top courses in a single payload.
+      parameters:
+        - $ref: "#/parameters/PeriodParam"
+        - $ref: "#/parameters/FromDateParam"
+        - $ref: "#/parameters/ToDateParam"
+        - $ref: "#/parameters/CourseIdParam"
+      responses:
+        "200":
+          description: Dashboard summary overview
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      exams: { $ref: "#/components/schemas/ExamSummaryData" }
+                      registrations: { $ref: "#/components/schemas/RegistrationsSummaryData" }
+                      top_courses:
+                        type: array
+                        items: { $ref: "#/components/schemas/CourseExamSummaryItem" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /api/v1/courses:
     get:
-      summary: List courses
-      parameters: [{ name: type, in: query, schema: { type: string } }]
-      responses: { "200": { description: Course list } }
+      summary: List all courses
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Course list }
     post:
       summary: Create a course
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/CourseInput" } } }
-      responses: { "201": { description: Course created }, "409": { description: Duplicate code } }
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CourseInput" }
+      responses:
+        "201": { description: Course created }
+        "409": { description: Duplicate course code }
+
   /api/v1/registrations:
     get:
-      summary: List and filter complete student registrations
-      parameters:
-        - { $ref: "#/parameters/courseId" }
-        - { $ref: "#/parameters/courseType" }
-        - { $ref: "#/parameters/from" }
-        - { $ref: "#/parameters/to" }
-      responses: { "200": { description: Paginated registrations } }
+      summary: List paginated student registrations
+      responses:
+        "200": { description: Paginated registrations }
     post:
       summary: Register a student for a course
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/RegistrationInput" } } }
-      responses: { "201": { description: Registration created } }
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistrationInput" }
+      responses:
+        "201": { description: Registration created }
+
   /api/v1/exam-results:
     get:
-      summary: List and filter exam results
-      parameters:
-        - { $ref: "#/parameters/courseId" }
-        - { $ref: "#/parameters/courseType" }
-        - { $ref: "#/parameters/status" }
-        - { $ref: "#/parameters/from" }
-        - { $ref: "#/parameters/to" }
-      responses: { "200": { description: Paginated exam results } }
+      summary: List paginated exam results
+      responses:
+        "200": { description: Paginated exam results }
     post:
       summary: Record an exam attempt
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/ExamResultInput" } } }
-      responses: { "201": { description: Exam result created } }
-  /api/v1/reports/exams:
-    get:
-      summary: Get pass/fail exam statistics
-      parameters:
-        - { $ref: "#/parameters/courseId" }
-        - { $ref: "#/parameters/courseType" }
-        - { $ref: "#/parameters/status" }
-        - { $ref: "#/parameters/period" }
-        - { $ref: "#/parameters/from" }
-        - { $ref: "#/parameters/to" }
-      responses: { "200": { description: Exam totals, course breakdown, and optional timeline } }
-  /api/v1/reports/registrations:
-    get:
-      summary: Get student registration statistics
-      parameters:
-        - { $ref: "#/parameters/courseId" }
-        - { $ref: "#/parameters/courseType" }
-        - { $ref: "#/parameters/period" }
-        - { $ref: "#/parameters/from" }
-        - { $ref: "#/parameters/to" }
-      responses: { "200": { description: Registration totals, course breakdown, and optional timeline } }
-  /api/v1/dashboard:
-    get:
-      summary: Get combined exam and registration reports
-      parameters:
-        - { $ref: "#/parameters/courseId" }
-        - { $ref: "#/parameters/courseType" }
-        - { $ref: "#/parameters/status" }
-        - { $ref: "#/parameters/period" }
-        - { $ref: "#/parameters/from" }
-        - { $ref: "#/parameters/to" }
-      responses: { "200": { description: Dashboard data } }
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExamResultInput" }
+      responses:
+        "201": { description: Exam result created }

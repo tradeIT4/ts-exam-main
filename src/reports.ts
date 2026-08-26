@@ -4,6 +4,7 @@ import type { Filters, Period } from "./types.js";
 type SqlParams = Record<string, string | number>;
 
 const periodExpression: Record<Period, string> = {
+  today: "strftime('%Y-%m-%d', {date})",
   daily: "strftime('%Y-%m-%d', {date})",
   weekly: "strftime('%Y-W%W', {date})",
   monthly: "strftime('%Y-%m', {date})",

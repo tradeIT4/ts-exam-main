@@ -1,79 +1,206 @@
-# Online Exam Reporting REST API
+# Online Exam & Registration Reporting REST API
 
-A dependency-light TypeScript API that other projects, dashboards, and platforms can use to record courses, student registrations, and exam results. It calculates pass/fail status and provides course-level and time-based reports.
+A secure, high-performance, read-only REST API built with Node.js and TypeScript. It enables third-party systems and dashboards to query aggregated statistics for online exams, course performance, and student registration trends without direct database access or exposure of sensitive student PII.
 
-## Run locally
+---
+
+## Architecture Overview
+
+The API is built using a clean, layered Service/Repository architecture:
+
+* **Database Layer (`src/database.ts`)**: Built-in SQLite (`node:sqlite`), optimized composite indices, WAL journal mode.
+* **Service Layer (`src/services/`)**: SQL aggregation queries for exams (`ExamService`), registration trend deltas (`RegistrationService`), unified dashboard (`DashboardService`), and API client credential lifecycle (`ClientService`).
+* **Controller Layer (`src/controllers/`)**: Small, focused request dispatchers with validated parameter handling.
+* **Middleware Pipeline (`src/middlewares/`)**:
+  * **Authentication (`auth.ts`)**: Bearer token and `X-API-Key` verification with SHA-256 key hashing, expiration, status, IP restrictions, and granular read permissions (`read:exams`, `read:registrations`, `read:reports`, `read:all`).
+  * **Rate Limiter (`rate-limiter.ts`)**: In-memory sliding window limiter with standard `X-RateLimit-*` and `Retry-After` headers.
+  * **Audit Logger (`audit-logger.ts`)**: Structured request logging to the `api_logs` table.
+  * **Security & HTTPS (`security.ts`)**: CORS, HTTPS enforcement, and security headers (`X-Content-Type-Options`, `X-Frame-Options`).
+* **Validation & Serialization (`src/validation.ts`, `src/serializers/`)**: Strict date parsing (YYYY-MM-DD / ISO), range verification, and standardized response envelopes.
+
+---
+
+## Getting Started
 
 Requires Node.js 22.5 or newer.
 
 ```bash
+# Install dependencies
 npm install
+
+# Run locally in development mode
 npm run dev
-```
 
-The API runs at `http://localhost:3000` and stores data in `data/exams.db`. Copy `.env.example` values into your environment to change the port, database, allowed origins, or API key.
+# Run automated test suite
+npm test
 
-For production:
-
-```bash
+# Build for production
 npm run build
 npm start
 ```
 
-## Main endpoints
+---
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/health` | Health check |
-| `POST`, `GET` | `/api/v1/courses` | Create/list courses |
-| `POST`, `GET` | `/api/v1/registrations` | Register/list students |
-| `POST`, `GET` | `/api/v1/exam-results` | Record/list exam attempts |
-| `GET` | `/api/v1/reports/exams` | Passed/failed totals, pass rate, course breakdown, timeline |
-| `GET` | `/api/v1/reports/registrations` | Registration totals, course breakdown, timeline |
-| `GET` | `/api/v1/dashboard` | Both reports in one response |
+## API Client Management (CLI)
 
-List and report endpoints accept `courseId`, `courseType`, `from`, and `to`. Exam endpoints also accept `status=passed|failed`. Report endpoints accept `period=daily|weekly|monthly|quarterly|yearly`. List endpoints support `page` and `limit` (maximum 100).
+Generate and manage API keys for third-party systems:
 
-Registrations represent student applications/enrolments for a course. Registration reports return both `totalRegistrations` and `uniqueStudents`; exam reports return the number of attempts as `total` and the distinct learner count as `uniqueStudents`. Every breakdown includes course ID, code, name, and type so another system can display or process the results.
+```bash
+# Create an API client with specific permissions
+npm run client:manage -- create "Analytics Partner" --permissions "read:exams,read:registrations"
 
-Example report:
+# Create a client restricted to specific IP addresses
+npm run client:manage -- create "Internal Microservice" --allowed-ips "192.168.1.50,10.0.0.1"
 
-```text
-GET /api/v1/reports/exams?courseType=programming&status=passed&period=monthly&from=2026-01-01&to=2026-12-31
+# List all registered API clients
+npm run client:manage -- list
+
+# Revoke an API client
+npm run client:manage -- revoke <client_id>
 ```
 
-Quarterly combined dashboard example:
+---
 
-```text
-GET /api/v1/dashboard?period=quarterly&from=2026-01-01T00:00:00Z&to=2026-12-31T23:59:59Z
-X-API-Key: your-shared-secret
+## Third-Party Read-Only Endpoints
+
+All requests require authentication:
+
+```http
+Authorization: Bearer <YOUR_API_TOKEN>
 ```
+*(or via header `X-API-Key: <YOUR_API_TOKEN>`)*
 
-Example registration:
+### 1. Online Exams Summary
+`GET /api/v1/exams/summary`
 
+Query parameters:
+* `period`: `today`, `weekly`, `monthly`, `yearly`
+* `from_date`: `YYYY-MM-DD` or ISO 8601 string
+* `to_date`: `YYYY-MM-DD` or ISO 8601 string
+* `course_id`: Filter by specific course ID
+
+**Example Response (`200 OK`):**
 ```json
 {
-  "studentId": "S-001",
-  "studentName": "Amina Yusuf",
-  "email": "amina@example.com",
-  "phone": "+254700000000",
-  "courseId": "course-uuid",
-  "registeredAt": "2026-08-24T09:00:00Z"
+  "success": true,
+  "period": "monthly",
+  "from_date": "2026-08-01",
+  "to_date": "2026-08-31",
+  "data": {
+    "total_exams": 42,
+    "students_taken": 1450,
+    "passed": 1180,
+    "failed": 270,
+    "pass_rate": 81.38,
+    "fail_rate": 18.62
+  }
 }
 ```
 
-Example exam result (status is calculated by the API):
+---
 
+### 2. Exams By Course
+`GET /api/v1/exams/by-course`
+
+Query parameters:
+* `page`: Page number (default: `1`)
+* `per_page`: Items per page (default: `50`, max: `100`)
+* `from_date`, `to_date`, `period`, `course_id`
+
+**Example Response (`200 OK`):**
 ```json
 {
-  "studentId": "S-001",
-  "courseId": "course-uuid",
-  "score": 82,
-  "passMark": 50,
-  "takenAt": "2026-08-24T12:00:00Z"
+  "success": true,
+  "data": [
+    {
+      "course_id": "c-math-101",
+      "course_name": "Mathematics",
+      "course_code": "MATH101",
+      "exam_date": "2026-08-24",
+      "students_taken": 120,
+      "passed": 100,
+      "failed": 20,
+      "pass_rate": 83.33,
+      "fail_rate": 16.67
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "per_page": 50,
+    "total": 1,
+    "total_pages": 1,
+    "has_next": false,
+    "has_prev": false
+  }
 }
 ```
 
-To protect a shared deployment, set `API_KEY`; clients must then include `X-API-Key`. Configure `ALLOWED_ORIGINS` as a comma-separated list of dashboard/platform origins instead of `*`.
+---
 
-See [openapi.yaml](./openapi.yaml) for the machine-readable API contract.
+### 3. Student Registrations Summary
+`GET /api/v1/registrations/summary`
+
+Returns weekly, monthly, and yearly current vs. previous registration counts and percentage growth rates.
+
+**Example Response (`200 OK`):**
+```json
+{
+  "success": true,
+  "data": {
+    "weekly": {
+      "current": 185,
+      "previous": 160,
+      "change_percentage": 15.63
+    },
+    "monthly": {
+      "current": 720,
+      "previous": 650,
+      "change_percentage": 10.77
+    },
+    "yearly": {
+      "current": 6850,
+      "previous": 5900,
+      "change_percentage": 16.10
+    }
+  }
+}
+```
+
+---
+
+### 4. Executive Dashboard Summary
+`GET /api/v1/dashboard/summary`
+
+Combines exam totals, registration growth deltas, and top courses in a single lightweight payload.
+
+---
+
+## Standard Error Format
+
+```json
+{
+  "success": false,
+  "message": "from_date must be earlier than or equal to to_date",
+  "errors": {
+    "from_date": [
+      "from_date must be earlier than or equal to to_date"
+    ]
+  }
+}
+```
+
+### HTTP Status Codes
+* `200` - OK
+* `400` - Bad Request / Validation Failure
+* `401` - Authentication Required
+* `403` - Permission Denied / IP Restriction / Token Revoked
+* `404` - Route Not Found
+* `422` - Unprocessable Entity
+* `429` - Too Many Requests (Rate Limit Exceeded)
+* `500` - Internal Server Error
+
+---
+
+## OpenAPI Specification
+
+Full machine-readable specification is available in [`openapi.yaml`](./openapi.yaml).

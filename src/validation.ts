@@ -1,8 +1,13 @@
 import type { IncomingMessage } from "node:http";
 import type { ApiError, Filters, Period, ResultStatus } from "./types.js";
+import { parseDateInput } from "./utils/dates.js";
 
-export function httpError(statusCode: number, message: string, details?: unknown): ApiError {
-  return Object.assign(new Error(message), { statusCode, details });
+export function httpError(statusCode: number, message: string, details?: unknown, errors?: Record<string, string[]> | undefined): ApiError {
+  const err = new Error(message) as ApiError;
+  err.statusCode = statusCode;
+  err.details = details;
+  err.errors = errors;
+  return err;
 }
 
 export async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
@@ -26,14 +31,14 @@ export async function readJson(request: IncomingMessage): Promise<Record<string,
 
 export function requiredString(body: Record<string, unknown>, field: string): string {
   const value = body[field];
-  if (typeof value !== "string" || !value.trim()) throw httpError(422, `${field} is required`);
+  if (typeof value !== "string" || !value.trim()) throw httpError(422, `${field} is required`, undefined, { [field]: [`${field} is required`] });
   return value.trim();
 }
 
 export function optionalString(body: Record<string, unknown>, field: string): string | null {
   const value = body[field];
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string") throw httpError(422, `${field} must be a string`);
+  if (typeof value !== "string") throw httpError(422, `${field} must be a string`, undefined, { [field]: [`${field} must be a string`] });
   return value.trim();
 }
 
@@ -41,7 +46,7 @@ export function numberInRange(body: Record<string, unknown>, field: string, fall
   const raw = body[field] ?? fallback;
   const value = typeof raw === "string" ? Number(raw) : raw;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) {
-    throw httpError(422, `${field} must be a number between 0 and 100`);
+    throw httpError(422, `${field} must be a number between 0 and 100`, undefined, { [field]: [`${field} must be a number between 0 and 100`] });
   }
   return value;
 }
@@ -49,33 +54,125 @@ export function numberInRange(body: Record<string, unknown>, field: string, fall
 export function isoDate(value: unknown, field: string, fallback = new Date().toISOString()): string {
   if (value === undefined) return fallback;
   if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
-    throw httpError(422, `${field} must be a valid ISO date`);
+    throw httpError(422, `${field} must be a valid ISO date`, undefined, { [field]: [`${field} must be a valid ISO date`] });
   }
   return new Date(value).toISOString();
 }
 
-export function parseFilters(url: URL): Filters {
-  const period = url.searchParams.get("period") ?? undefined;
-  const status = url.searchParams.get("status") ?? undefined;
-  if (period && !["daily", "weekly", "monthly", "quarterly", "yearly"].includes(period)) {
-    throw httpError(400, "period must be daily, weekly, monthly, quarterly, or yearly");
+export function validateSummaryQuery(url: URL): {
+  period?: Period | undefined;
+  fromDate?: string | undefined;
+  toDate?: string | undefined;
+  courseId?: string | undefined;
+  courseType?: string | undefined;
+  status?: ResultStatus | undefined;
+  page: number;
+  perPage: number;
+} {
+  const errors: Record<string, string[]> = {};
+
+  const rawPeriod = url.searchParams.get("period")?.toLowerCase();
+  let period: Period | undefined;
+  if (rawPeriod) {
+    const validPeriods: Period[] = ["today", "daily", "weekly", "monthly", "quarterly", "yearly"];
+    if (validPeriods.includes(rawPeriod as Period)) {
+      period = rawPeriod as Period;
+    } else {
+      errors.period = ["period must be one of: today, weekly, monthly, yearly, daily, quarterly"];
+    }
   }
-  if (status && !["passed", "failed"].includes(status)) {
-    throw httpError(400, "status must be passed or failed");
+
+  const rawStatus = url.searchParams.get("status")?.toLowerCase();
+  let status: ResultStatus | undefined;
+  if (rawStatus) {
+    if (rawStatus === "passed" || rawStatus === "failed") {
+      status = rawStatus;
+    } else {
+      errors.status = ["status must be either 'passed' or 'failed'"];
+    }
   }
-  const from = url.searchParams.get("from") ?? undefined;
-  const to = url.searchParams.get("to") ?? undefined;
-  if (from && Number.isNaN(Date.parse(from))) throw httpError(400, "from must be a valid date");
-  if (to && Number.isNaN(Date.parse(to))) throw httpError(400, "to must be a valid date");
-  if (from && to && Date.parse(from) > Date.parse(to)) {
-    throw httpError(400, "from must be earlier than or equal to to");
+
+  // Support both snake_case and camelCase / short param names
+  const rawFrom = url.searchParams.get("from_date") ?? url.searchParams.get("from");
+  const rawTo = url.searchParams.get("to_date") ?? url.searchParams.get("to");
+
+  let fromDate: string | undefined;
+  let toDate: string | undefined;
+
+  if (rawFrom) {
+    fromDate = parseDateInput(rawFrom, false);
+    if (!fromDate) {
+      errors.from_date = ["from_date must be a valid date in YYYY-MM-DD or ISO 8601 format"];
+    }
   }
+
+  if (rawTo) {
+    toDate = parseDateInput(rawTo, true);
+    if (!toDate) {
+      errors.to_date = ["to_date must be a valid date in YYYY-MM-DD or ISO 8601 format"];
+    }
+  }
+
+  if (fromDate && toDate) {
+    if (new Date(fromDate).getTime() > new Date(toDate).getTime()) {
+      errors.from_date = errors.from_date ?? [];
+      errors.from_date.push("from_date must be earlier than or equal to to_date");
+    }
+  }
+
+  const courseId = url.searchParams.get("course_id") ?? url.searchParams.get("courseId") ?? undefined;
+  const courseType = url.searchParams.get("course_type") ?? url.searchParams.get("courseType") ?? undefined;
+
+  // Pagination
+  const rawPage = url.searchParams.get("page");
+  let page = 1;
+  if (rawPage !== null) {
+    const parsedPage = Number(rawPage);
+    if (!Number.isInteger(parsedPage) || parsedPage < 1) {
+      errors.page = ["page must be a positive integer >= 1"];
+    } else {
+      page = parsedPage;
+    }
+  }
+
+  const rawLimit = url.searchParams.get("per_page") ?? url.searchParams.get("limit");
+  let perPage = 50;
+  if (rawLimit !== null) {
+    const parsedLimit = Number(rawLimit);
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+      errors.per_page = ["per_page must be an integer between 1 and 100"];
+    } else {
+      perPage = parsedLimit;
+    }
+  }
+
+  if (Object.keys(errors).length > 0) {
+    const firstMessage = Object.values(errors)[0]?.[0] ?? "Validation error";
+    throw httpError(400, firstMessage, undefined, errors);
+  }
+
   return {
-    ...(url.searchParams.get("courseId") ? { courseId: url.searchParams.get("courseId")! } : {}),
-    ...(url.searchParams.get("courseType") ? { courseType: url.searchParams.get("courseType")! } : {}),
-    ...(status ? { status: status as ResultStatus } : {}),
-    ...(period ? { period: period as Period } : {}),
-    ...(from ? { from: new Date(from).toISOString() } : {}),
-    ...(to ? { to: new Date(to).toISOString() } : {}),
+    period,
+    fromDate,
+    toDate,
+    courseId,
+    courseType,
+    status,
+    page,
+    perPage,
+  };
+}
+
+export function parseFilters(url: URL): Filters {
+  const q = validateSummaryQuery(url);
+  return {
+    courseId: q.courseId,
+    courseType: q.courseType,
+    status: q.status,
+    period: q.period,
+    from: q.fromDate,
+    to: q.toDate,
+    fromDate: q.fromDate,
+    toDate: q.toDate,
   };
 }
