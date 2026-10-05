@@ -1,0 +1,17 @@
+﻿.certification-admin .nav-item { cursor:pointer; }
+.sidebar-note { margin:auto 10px 0; padding:20px 10px 0; color:var(--muted); font-size:13px; }
+.sidebar-note strong { color:var(--ink); }.sidebar-note p { line-height:1.6; }
+.visibility-guide { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:28px 0 0; }
+.visibility-guide article { padding:22px; border:1px solid var(--line); border-radius:14px; background:white; }
+.visibility-guide h2 { font-size:18px; margin:14px 0 6px; }.visibility-guide p { color:var(--muted); font-size:13px; line-height:1.6; margin:0; }
+.visibility-badge { display:inline-block; border-radius:20px; padding:6px 10px; font-size:12px; font-weight:700; }
+.visibility-badge.held { background:#fff2dc; color:#87520b; }.visibility-badge.visible { background:var(--green-soft); color:#13744f; }
+.certification-admin .filters input { width:260px; }
+.control-button { padding:9px 12px; border:1px solid var(--line); border-radius:8px; background:white; color:var(--ink); cursor:pointer; font-weight:600; font-size:12px; }
+.control-button.hold { background:#fff2dc; color:#87520b; border-color:#f4d79f; }.control-button.release { background:var(--green-soft); color:#13744f; border-color:#afe2cd; }
+.control-button:disabled { opacity:.5; cursor:default; }
+.certification-admin .table-panel td { font-size:12px; white-space:normal; }.certification-admin .table-panel td:last-child { min-width:260px; }
+.pagination { display:flex; align-items:center; gap:14px; margin-top:18px; font-size:13px; }
+#message { min-height:20px; font-size:13px; }#code-message:empty { display:none; }#code-message { padding:16px; background:var(--blue-soft); border-radius:10px; overflow-wrap:anywhere; }
+.student-code-help { color:var(--muted); font-size:13px; line-height:1.6; }
+@media(max-width:760px) { .visibility-guide { grid-template-columns:1fr; }.certification-admin .filters input { width:100%; } }

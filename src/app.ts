@@ -29,6 +29,7 @@ const adminAssets = new Map<string, { file: string; contentType: string }>([
   ["/admin/certifications", { file: "certifications.html", contentType: "text/html; charset=utf-8" }],
   ["/student/certifications", { file: "student-certifications.html", contentType: "text/html; charset=utf-8" }],
   ["/admin/certifications.js", { file: "certifications.js", contentType: "text/javascript; charset=utf-8" }],
+  ["/admin/certifications.css", { file: "certifications.css", contentType: "text/css; charset=utf-8" }],
   ["/admin/student-certifications.js", { file: "student-certifications.js", contentType: "text/javascript; charset=utf-8" }],
   ["/admin", { file: "data-analytics.html", contentType: "text/html; charset=utf-8" }],
   ["/admin/data-analytics", { file: "data-analytics.html", contentType: "text/html; charset=utf-8" }],

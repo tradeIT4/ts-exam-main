@@ -14,17 +14,24 @@ async function load() {
   el('rows').replaceChildren();
   for (const item of body.data) {
     const row = document.createElement('tr');
-    for (const text of [`${item.studentName} (${item.studentId})`, item.courseName, item.status === 'hold' ? 'On hold' : 'Access granted']) {
+    for (const text of [`${item.studentName} (${item.studentId})`, item.courseName]) {
       const cell = document.createElement('td'); cell.textContent = text; row.append(cell);
     }
+    const visibility = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = `visibility-badge ${item.status === 'hold' ? 'held' : 'visible'}`;
+    badge.textContent = item.status === 'hold' ? 'On hold · Hidden' : 'Released · Visible';
+    visibility.append(badge); row.append(visibility);
     const controls = document.createElement('td');
-    for (const [label, status, rotateCode] of [[item.status === 'hold' ? 'Grant access / Remove hold' : 'Place on hold', item.status === 'hold' ? 'active' : 'hold', false], ['Generate student code', item.status, true]]) {
+    for (const [label, status, rotateCode] of [[item.status === 'hold' ? 'Release & show' : 'Hold & hide', item.status === 'hold' ? 'active' : 'hold', false], ['Generate student code', item.status, true]]) {
       const button = document.createElement('button'); button.textContent = label; button.type = 'button';
+      button.className = `control-button ${rotateCode ? '' : status === 'hold' ? 'hold' : 'release'}`;
+      button.setAttribute('aria-label', `${label} for ${item.studentName}, ${item.courseName}`);
       button.addEventListener('click', () => run(async () => {
         const result = await api(`/api/v1/certifications/${encodeURIComponent(item.id)}`, { method: 'PUT', body: JSON.stringify({ status, rotateCode }) });
         el('code-message').textContent = result.accessCode ? `Private code for ${item.studentName} — ${item.courseName}: ${result.accessCode}. Save and share this code; it is displayed only once.` : '';
         await load();
-        el('message').textContent = status === 'hold' ? 'Certification is on hold.' : 'Certification access granted.';
+        el('message').textContent = rotateCode ? 'Student code generated. Visibility is unchanged.' : status === 'hold' ? 'Certification held and hidden from the student. Access is blocked.' : 'Hold removed. Certification details are now visible to the student.';
       })); controls.append(button, ' ');
     }
     row.append(controls); el('rows').append(row);
@@ -41,3 +48,12 @@ async function run(action) {
 el('login').addEventListener('submit', (event) => { event.preventDefault(); run(async () => { page = 1; el('code-message').textContent = ''; await load(); }); });
 el('previous').addEventListener('click', () => run(async () => { page = Math.max(1, page - 1); await load(); }));
 el('next').addEventListener('click', () => run(async () => { page = Math.min(totalPages, page + 1); await load(); }));
+function toggleSidebar(open) {
+  el('sidebar').classList.toggle('open', open);
+  el('sidebar-scrim').classList.toggle('visible', open);
+  el('menu-button').setAttribute('aria-expanded', String(open));
+  el('menu-button').setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+}
+el('menu-button').addEventListener('click', () => toggleSidebar(!el('sidebar').classList.contains('open')));
+el('sidebar-scrim').addEventListener('click', () => toggleSidebar(false));
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') toggleSidebar(false); });
