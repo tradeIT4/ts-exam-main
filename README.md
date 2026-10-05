@@ -45,6 +45,10 @@ The admin analytics dashboard is available at `http://localhost:3000/admin/data-
 
 ## API Client Management (CLI)
 
+Certification controls are available at `/admin/certifications`. All registrations, including existing ones, default to **On hold**. An admin can grant access, restore the hold, and generate a private student status code. Students check their current status at `/student/certifications` using that code. Codes are stored as hashes; generating another code invalidates the previous one.
+
+`GET /api/v1/certifications?page=1&limit=25` requires `read:certifications` or `read:all`. `PUT /api/v1/certifications/:registrationId` accepts `{ "status": "hold" | "active", "rotateCode": true | false }` and requires `write:certifications` or `write:all`. `POST /api/v1/student/certifications/status` accepts `{ "accessCode": "..." }` and returns only `status` and `accessAllowed`, without certification details. `POST /api/v1/student/certifications/view` accepts the same code and returns course details only when active; held certifications return HTTP 403. Both routes check the stored hold on every request and use `Cache-Control: no-store`. The student page hides certification details while held or when verification fails and rechecks every 15 seconds while visible. This feature manages certification visibility and approval; certificate file generation and downloads are not part of this reporting API.
+
 Generate and manage API keys for third-party systems:
 
 ```bash

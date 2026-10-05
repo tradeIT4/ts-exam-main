@@ -76,7 +76,8 @@ export function createAuthMiddleware(db: ExamDatabase, clientService = new Clien
     if (requiredPermission) {
       const perms = authResult.client.permissions;
       const hasPermission = perms.includes("*") ||
-        perms.includes("read:all") ||
+        (requiredPermission.startsWith("read:") && perms.includes("read:all")) ||
+        (requiredPermission.startsWith("write:") && perms.includes("write:all")) ||
         perms.includes(requiredPermission) ||
         (requiredPermission.startsWith("read:") && perms.includes("read:*"));
 

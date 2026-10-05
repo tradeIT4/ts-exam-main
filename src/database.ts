@@ -200,6 +200,13 @@ export function createDatabase(filename = process.env.DATABASE_PATH ?? "./data/e
       UNIQUE(student_id, course_id)
     );
 
+    CREATE TABLE IF NOT EXISTS certifications (
+      registration_id TEXT PRIMARY KEY REFERENCES registrations(id),
+      status TEXT NOT NULL DEFAULT 'hold' CHECK(status IN ('hold', 'active')),
+      access_code_hash TEXT UNIQUE,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS exam_results (
       id TEXT PRIMARY KEY,
       student_id TEXT NOT NULL,

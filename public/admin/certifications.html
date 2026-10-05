@@ -1,0 +1,9 @@
+﻿<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Certifications | Exam Admin</title><link rel="stylesheet" href="/admin/data-analytics.css"></head>
+<body><main style="max-width:1100px;margin:40px auto;padding:24px"><a href="/admin">Back to analytics</a><h1>Student certifications</h1><p>Certifications are paused by default. Students see “On hold” until you grant access. You can place a certification back on hold at any time.</p>
+<form id="login"><label>Admin API key <input id="key" type="password" required autocomplete="off"></label> <button class="primary-button">Load students</button></form>
+<p id="message" role="status" aria-live="polite"></p><p id="code-message" role="status"></p>
+<div class="table-scroll"><table><thead><tr><th>Student</th><th>Course</th><th>Status</th><th>Controls</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p><button id="previous" disabled>Previous</button> <span id="page"></span> <button id="next" disabled>Next</button></p>
+<p>Generate a private status code and share it with the student. Students enter it at <a href="/student/certifications">the certification status page</a>. Generating a new code invalidates the previous code.</p>
+</main><script src="/admin/certifications.js" defer></script></body></html>

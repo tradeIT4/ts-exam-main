@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
+import { hashApiKey } from "./utils/crypto.js";
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
@@ -25,6 +26,10 @@ function send(response: ServerResponse, status: number, body: unknown, headers: 
 }
 
 const adminAssets = new Map<string, { file: string; contentType: string }>([
+  ["/admin/certifications", { file: "certifications.html", contentType: "text/html; charset=utf-8" }],
+  ["/student/certifications", { file: "student-certifications.html", contentType: "text/html; charset=utf-8" }],
+  ["/admin/certifications.js", { file: "certifications.js", contentType: "text/javascript; charset=utf-8" }],
+  ["/admin/student-certifications.js", { file: "student-certifications.js", contentType: "text/javascript; charset=utf-8" }],
   ["/admin", { file: "data-analytics.html", contentType: "text/html; charset=utf-8" }],
   ["/admin/data-analytics", { file: "data-analytics.html", contentType: "text/html; charset=utf-8" }],
   ["/admin/data-analytics.css", { file: "data-analytics.css", contentType: "text/css; charset=utf-8" }],
@@ -97,6 +102,57 @@ export function createApp(db: ExamDatabase = createDatabase()) {
 
       if (method === "GET" && sendAdminAsset(response, pathname)) {
         return;
+      }
+
+      // Recheck the persisted hold on every student request, including direct views.
+      if (method === "POST" && (pathname === "/api/v1/student/certifications/status" || pathname === "/api/v1/student/certifications/view")) {
+        response.setHeader("Cache-Control", "no-store");
+        const body = await readJson(request);
+        const code = requiredString(body, "accessCode");
+        const record = db.prepare(`SELECT c.name AS courseName, s.status
+          FROM certifications s JOIN registrations r ON r.id = s.registration_id
+          JOIN courses c ON c.id = r.course_id WHERE s.access_code_hash = ?`).get(hashApiKey(code)) as { courseName: string; status: string } | undefined;
+        if (!record) throw httpError(404, "Invalid certification access code");
+        if (pathname.endsWith("/view")) {
+          if (record.status === "hold") throw httpError(403, "Certification is on hold. Access is blocked until an administrator removes the hold.");
+          send(response, 200, { courseName: record.courseName, status: record.status });
+        } else {
+          send(response, 200, { status: record.status, accessAllowed: record.status === "active" });
+        }
+        return;
+      }
+
+      if (pathname === "/api/v1/certifications" || pathname.startsWith("/api/v1/certifications/")) {
+        response.setHeader("Cache-Control", "no-store");
+        if (!authMiddleware(req, response, method === "GET" ? "read:certifications" : "write:certifications")) return;
+        if (method === "GET" && pathname === "/api/v1/certifications") {
+          const { page, limit } = paging(url);
+          const data = db.prepare(`SELECT r.id, r.student_id AS studentId, r.student_name AS studentName,
+            c.name AS courseName, COALESCE(s.status, 'hold') AS status
+            FROM registrations r JOIN courses c ON c.id = r.course_id
+            LEFT JOIN certifications s ON s.registration_id = r.id
+            ORDER BY r.registered_at DESC, r.id LIMIT ? OFFSET ?`).all(limit, (page - 1) * limit);
+          const total = (db.prepare("SELECT COUNT(*) AS total FROM registrations").get() as { total: number }).total;
+          send(response, 200, { data, page, total, totalPages: Math.ceil(total / limit) });
+          return;
+        }
+        const match = pathname.match(/^\/api\/v1\/certifications\/([^/]+)$/);
+        if (method === "PUT" && match) {
+          const id = decodeURIComponent(match[1]!);
+          if (!db.prepare("SELECT id FROM registrations WHERE id = ?").get(id)) throw httpError(404, "Registration not found");
+          const body = await readJson(request);
+          const status = requiredString(body, "status");
+          if (status !== "hold" && status !== "active") throw httpError(400, "status must be hold or active");
+          const existing = db.prepare("SELECT access_code_hash FROM certifications WHERE registration_id = ?").get(id);
+          const accessCode = !existing?.access_code_hash || body.rotateCode === true ? randomBytes(24).toString("hex") : null;
+          db.prepare(`INSERT INTO certifications (registration_id, status, access_code_hash, updated_at)
+            VALUES (?, ?, ?, ?) ON CONFLICT(registration_id) DO UPDATE SET status = excluded.status,
+            access_code_hash = COALESCE(excluded.access_code_hash, certifications.access_code_hash), updated_at = excluded.updated_at`)
+            .run(id, status, accessCode ? hashApiKey(accessCode) : null, new Date().toISOString());
+          send(response, 200, { id, status, ...(accessCode ? { accessCode } : {}) });
+          return;
+        }
+        throw httpError(404, "Route not found");
       }
 
       // Check authentication requirements
