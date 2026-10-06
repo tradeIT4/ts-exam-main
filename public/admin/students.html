@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Student management</title><link rel="stylesheet" href="/admin/certifications.css"></head>
+<body><main style="max-width:1000px;margin:40px auto;padding:24px">
+<a href="/admin">Data analytics</a><h1>Student management</h1><p>Customer service can add students and edit saved student records. Students cannot be removed.</p>
+<form id="login"><label>API key <input id="key" type="password" required autocomplete="off"></label><button class="primary-button">Load students</button></form>
+<p id="message" role="status" aria-live="polite"></p>
+<section id="management" hidden><h2 id="form-title">Add student</h2><form id="student-form">
+<label>Student ID <input name="studentId" required></label>
+<label>Student name <input name="studentName" required></label>
+<label>Email <input name="email" type="email" required></label>
+<label>Phone <input name="phone" type="tel"></label>
+<label>Course <select name="courseId" id="course" required></select></label>
+<button class="primary-button" id="save">Add student</button><button type="button" id="cancel" hidden>Cancel edit</button>
+</form><h2>Saved students</h2><div class="table-scroll"><table><thead><tr><th>Student ID</th><th>Name</th><th>Email</th><th>Course</th><th>Action</th></tr></thead><tbody id="rows"></tbody></table></div>
+<button id="previous" type="button">Previous</button> <span id="page"></span> <button id="next" type="button">Next</button></section>
+</main><script src="/admin/students.js" defer></script></body></html>

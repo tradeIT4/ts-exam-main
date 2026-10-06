@@ -26,6 +26,8 @@ function send(response: ServerResponse, status: number, body: unknown, headers: 
 }
 
 const adminAssets = new Map<string, { file: string; contentType: string }>([
+  ["/admin/students", { file: "students.html", contentType: "text/html; charset=utf-8" }],
+  ["/admin/students.js", { file: "students.js", contentType: "text/javascript; charset=utf-8" }],
   ["/admin/certifications", { file: "certifications.html", contentType: "text/html; charset=utf-8" }],
   ["/student/certifications", { file: "student-certifications.html", contentType: "text/html; charset=utf-8" }],
   ["/admin/certifications.js", { file: "certifications.js", contentType: "text/javascript; charset=utf-8" }],
@@ -200,7 +202,39 @@ export function createApp(db: ExamDatabase = createDatabase()) {
 
       // If API_KEY is set or token passed to existing endpoints, verify auth
       if (process.env.API_KEY || token) {
-        if (!authMiddleware(req, response)) return;
+        const resource = pathname.split("/")[3];
+        const permission = method === "GET" ? `read:${resource === "dashboard" ? "reports" : resource}`
+          : resource === "registrations" && method === "POST" ? "write:registrations:create"
+          : resource === "registrations" && (method === "PUT" || method === "PATCH") ? "write:registrations:update"
+          : `write:${resource}`;
+        if (!authMiddleware(req, response, permission)) return;
+      }
+
+      const registrationMatch = pathname.match(/^\/api\/v1\/registrations\/([^/]+)$/);
+      if (method === "DELETE" && (registrationMatch || pathname === "/api/v1/registrations")) {
+        throw httpError(403, "Students cannot be removed");
+      }
+      if ((method === "PATCH" || method === "PUT") && registrationMatch) {
+        if (!authMiddleware(req, response, "write:registrations:update")) return;
+        const id = decodeURIComponent(registrationMatch[1]!);
+        const existing = db.prepare(`SELECT id, student_id AS studentId, student_name AS studentName,
+          email, phone, course_id AS courseId, registered_at AS registeredAt FROM registrations WHERE id = ?`).get(id);
+        if (!existing) throw httpError(404, "Student registration not found");
+        const body = await readJson(request);
+        const merged = { ...existing, ...body };
+        const registration = {
+          id,
+          studentId: requiredString(merged, "studentId"),
+          studentName: requiredString(merged, "studentName"),
+          email: requiredString(merged, "email").toLowerCase(),
+          phone: optionalString(merged, "phone"),
+          courseId: requiredString(merged, "courseId"),
+          registeredAt: isoDate(merged.registeredAt, "registeredAt"),
+        };
+        db.prepare(`UPDATE registrations SET student_id=:studentId, student_name=:studentName,
+          email=:email, phone=:phone, course_id=:courseId, registered_at=:registeredAt WHERE id=:id`).run(registration);
+        send(response, 200, registration);
+        return;
       }
 
       if (method === "POST" && pathname === "/api/v1/courses") {

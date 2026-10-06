@@ -210,3 +210,9 @@ Combines exam totals, registration growth deltas, and top courses in a single li
 ## OpenAPI Specification
 
 Full machine-readable specification is available in [`openapi.yaml`](./openapi.yaml).
+
+## Customer service student management
+
+Open `/admin/students` to add students and edit saved registrations. Removal is blocked.
+Create a customer service API key with `npm run client:manage -- create "Customer Service" --role customer-service`.
+This role can read courses and registrations, create registrations, and update existing registrations; it cannot change courses, exam results, or certifications.

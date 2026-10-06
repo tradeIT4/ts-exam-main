@@ -5,6 +5,7 @@ import { generateApiKey, hashApiKey, secureCompare } from "../utils/crypto.js";
 
 export interface CreateClientInput {
   name: string;
+  role?: "customer-service";
   allowedIps?: string[] | string | null | undefined;
   permissions?: string[] | string | undefined;
   expiresAt?: string | null | undefined;
@@ -23,7 +24,9 @@ export class ClientService {
       ? input.allowedIps.join(",")
       : input.allowedIps ?? null;
 
-    const permissions = Array.isArray(input.permissions)
+    const permissions = input.role === "customer-service"
+      ? "read:courses,read:registrations,write:registrations:create,write:registrations:update"
+      : Array.isArray(input.permissions)
       ? input.permissions.join(",")
       : input.permissions ?? "read:all";
 

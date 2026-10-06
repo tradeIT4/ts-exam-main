@@ -14,6 +14,7 @@ Usage:
   node --experimental-strip-types src/scripts/manage-clients.ts revoke <client_id>
 
 Examples:
+  node --experimental-strip-types src/scripts/manage-clients.ts create "Customer Service" --role customer-service
   node --experimental-strip-types src/scripts/manage-clients.ts create "Third Party University" --permissions "read:exams,read:registrations,read:reports"
   node --experimental-strip-types src/scripts/manage-clients.ts create "Reporting Microservice" --allowed-ips "192.168.1.100,10.0.0.1"
   node --experimental-strip-types src/scripts/manage-clients.ts list
@@ -30,11 +31,16 @@ if (command === "create") {
   }
 
   let permissions = "read:all";
+  let role: "customer-service" | undefined;
   let allowedIps: string | null = null;
   let expiresAt: string | null = null;
 
   for (let i = 4; i < process.argv.length; i++) {
-    if (process.argv[i] === "--permissions" && process.argv[i + 1]) {
+    if (process.argv[i] === "--role" && process.argv[i + 1]) {
+      const value = process.argv[++i];
+      if (value !== "customer-service") throw new Error("Unknown role. Use customer-service.");
+      role = value;
+    } else if (process.argv[i] === "--permissions" && process.argv[i + 1]) {
       permissions = process.argv[++i]!;
     } else if (process.argv[i] === "--allowed-ips" && process.argv[i + 1]) {
       allowedIps = process.argv[++i]!;
@@ -45,6 +51,7 @@ if (command === "create") {
 
   const result = clientService.createClient({
     name,
+    ...(role ? { role } : {}),
     permissions,
     allowedIps,
     expiresAt,
